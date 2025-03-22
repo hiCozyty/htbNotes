@@ -1,2 +1,2 @@
 # htbNotes
-notes and writeup of boxes
+thought process and writeup of boxes
