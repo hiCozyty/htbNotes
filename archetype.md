@@ -783,3 +783,5 @@ b91ccec3305e98240082d4474b848528
 
 ```
 
+missed getting ConsoleHost_history.txt (bash_history equivalent in windows)
+
